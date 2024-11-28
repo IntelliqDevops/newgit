@@ -1,0 +1,38 @@
+# Docker
+# Build a Docker image
+# https://docs.microsoft.com/azure/devops/pipelines/languages/docker
+
+trigger:
+- master
+
+resources:
+- repo: self
+
+variables:
+  tag: '$(Build.BuildId)'
+
+stages:
+- stage: Download
+  displayName: Download
+  jobs:
+  - job: Download
+    displayName: Download
+    pool:
+      name: "agent1"
+    steps:
+    - task: Bash@3
+      inputs:
+       targetType: 'inline'
+       script: 'git clone https://github.com/intelliqittrainings/maven.git'
+- stage: Build
+  displayName: Build
+  jobs:
+  - job: Build
+    displayName: Build
+    pool:
+      name: "agent1"
+    steps:
+    - task: Bash@3
+      inputs:
+       targetType: 'inline'
+       script: 'cd /home/azureuser/myagent/_work/1/s/maven;mvn package;cp /home/azureuser/myagent/_work/1/s/webapp/target/webapp.war /home/azureuser'
