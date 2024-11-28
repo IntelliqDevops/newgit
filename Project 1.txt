@@ -1,0 +1,55 @@
+Project 1
+=====================
+1 Download the java project from GitHub (azure repos)
+
+2 With maven create a artifact (war)
+
+3 Setup a qsaserver where tomcat is installed and deploy the artifact into the tomcat
+
+4 Download and run selenium scripts
+
+5 Setup a prodserver where tomcat is installed and deploy artifact into that
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Project 2
+====================
+1 Download the java project from GitHub (azure repos)
+
+2 With maven create a artifact (war)
+
+3 Design a dockerfile from tomee base image and copy the artifact into it
+
+4 Upload this image into the ACR registry
+
+5 Deploy that image as a container in the QAServers
+
+6 Download and execute the selenium scripts
+
+7 Deploy a deployment and services in the AKS cluster
+

@@ -1,0 +1,249 @@
+1. Base Stage
+dockerfile
+
+# Define a base stage that uses the official python runtime base image
+======================================
+FROM python:3.11-slim AS base
+=================================
+Purpose: The base stage starts with a lightweight Python 3.11 image (python:3.11-slim).
+Why?: Using a slim version keeps the image small, which is more efficient for building and deploying applications.
+dockerfile
+
+===============================================
+# Add curl for healthcheck
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends curl && \
+    rm -rf /var/lib/apt/lists/*
+=========================================================
+Purpose: Installs curl for use in health checks and removes cached files to reduce image size.
+Why?: curl can be useful for container health checks, and using --no-install-recommends ensures that only essential packages are installed.
+dockerfile
+
+==========================================
+# Set the application directory
+WORKDIR /usr/local/app
+==========================================
+Purpose: Sets the working directory to /usr/local/app. All subsequent commands use this as the current directory.
+Why?: Ensures consistency when copying files and running commands.
+dockerfile
+
+===================================================
+# Install our requirements.txt
+COPY requirements.txt ./requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+==================================================
+Purpose: Copies requirements.txt to the container and installs Python dependencies without caching, which reduces image size.
+Why?: Installing dependencies here allows Docker to cache this step, speeding up future builds if requirements.txt hasn't changed.
+
+2. Development Stage
+dockerfile
+
+============================================================================================
+# Define a stage specifically for development, where it'll watch for filesystem changes
+FROM base AS dev
+RUN pip install watchdog
+ENV FLASK_ENV=development
+CMD ["python", "app.py"]
+=============================================================================================
+Purpose: The dev stage extends the base stage and installs watchdog, a tool that can monitor file system changes, useful for development.
+Why?: FLASK_ENV=development sets Flask to development mode, enabling features like hot reloading and better error messages.
+CMD: Runs the app using Python, suitable for local development.
+
+3. Production Stage
+dockerfile
+========================================================================
+# Define the final stage that will bundle the application for production
+FROM base AS final
+
+# Copy our code from the current folder to the working directory inside the container
+COPY . .
+==============================================================================
+
+Purpose: The final stage builds on base and copies the entire project into the container.
+Why?: Ensures the container has all necessary code to run in production.
+dockerfile
+
+===========================================================
+# Make port 80 available for links and/or publish
+EXPOSE 80
+===================================================================
+Purpose: Specifies that the container will listen on port 80.
+Why?: Helps with container networking and documentation; it signals that this is the port to access the app.
+dockerfile
+
+================================================================================================
+# Define our command to be run when launching the container
+CMD ["gunicorn", "app:app", "-b", "0.0.0.0:80", "--log-file", "-", "--access-logfile", "-", "--workers", "4", "--keep-alive", "0"]
+==================================================================================================
+Purpose: Runs gunicorn, a robust production server for Python web apps. It binds to 0.0.0.0:80 to listen for all incoming traffic on port 80 and logs to standard output.
+Why?: Using gunicorn allows for better performance and handling of multiple concurrent requests, with --workers 4 specifying 4 worker processes and --keep-alive 0 disabling keep-alive connections for more efficient handling.
+
+
+
+
+
+
+
+Let's go through this Dockerfile step by step and explain each part:
+
+================================
+FROM node:18-slim
+==================================
+Purpose: Starts the image with Node.js version 18 using the slim version, which is smaller and more efficient.
+Why?: Reduces the overall size of the Docker image while still providing the Node.js environment needed to run the application.
+
+=========================================================================
+# add curl for healthcheck
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends curl tini && \
+    rm -rf /var/lib/apt/lists/*
+=========================================================================
+Purpose: Updates the package index, installs curl and tini, and then clears cached data to minimize the image size.
+curl: Useful for performing health checks or downloading content.
+tini: A minimal init system that helps manage processes and handles signals correctly, preventing issues with orphaned zombie processes.
+Why?: tini improves container process handling, while curl is useful for monitoring and troubleshooting.
+
+===========================================================================
+WORKDIR /usr/local/app
+===========================================================================
+Purpose: Sets the working directory inside the container to /usr/local/app. All subsequent commands operate from this directory.
+Why?: Organizes your project files and provides a consistent context for future commands.
+dockerfile
+
+=========================================================================
+# have nodemon available for local dev use (file watching)
+RUN npm install -g nodemon
+=============================================================
+Purpose: Installs nodemon globally for development. nodemon automatically restarts the Node.js application when file changes in the directory are detected.
+Why?: Useful for development environments to enable hot-reloading of the server code without manual restarts.
+
+=================================================
+COPY package*.json ./
+==================================================
+Purpose: Copies package.json and package-lock.json (or any matching pattern) from the host to the container's working directory.
+Why?: Ensures that only these files are copied before running npm ci, optimizing the build cache by preventing re-installation of dependencies if package*.json hasn't changed.
+
+=================================================================
+RUN npm ci && \
+ npm cache clean --force && \
+ mv /usr/local/app/node_modules /node_modules
+=================================================================
+Purpose:
+npm ci: Installs dependencies as defined in package-lock.json, ensuring a consistent installation with exact versions.
+npm cache clean --force: Cleans up npm cache to reduce the final image size.
+mv /usr/local/app/node_modules /node_modules: Moves node_modules to the root directory, which can be useful to make dependencies globally accessible.
+Why?: Using npm ci is faster and more reliable for production builds compared to npm install. Cleaning the cache and relocating node_modules helps optimize the image.
+
+
+===================================
+COPY . .
+=====================================
+Purpose: Copies the entire application code from the host to the container's working directory (/usr/local/app).
+Why?: Ensures all source code and additional files are included in the container.
+
+===============================================
+ENV PORT 80
+EXPOSE 80
+ENV PORT 80:
+====================================================
+
+Purpose: Sets an environment variable PORT to 80, which is used by the application to determine which port to listen on.
+Why?: Standardizes the port for containerized deployment.
+EXPOSE 80:
+
+Purpose: Indicates that the container listens on port 80. It helps with linking and documentation but does not publish the port outside of Docker by itself.
+Why?: Communicates the intended port for use by other containers or for mapping.
+
+===================================================
+ENTRYPOINT ["/usr/bin/tini", "--"]
+======================================================
+
+Purpose: Specifies tini as the init system for the container. tini ensures proper signal handling and child process reaping.
+Why?: Prevents zombie processes and helps manage the container lifecycle cleanly.
+
+=====================================
+CMD ["node", "server.js"]
+=====================================
+Purpose: Specifies the default command to run when the container starts. This command launches the Node.js application using server.js.
+Why?: Defines how the application is executed when the container runs.
+
+
+
+===================================================================================
+FROM --platform=${BUILDPLATFORM} mcr.microsoft.com/dotnet/sdk:7.0 as build
+===================================================================================
+
+Purpose: This line sets the base image as the .NET SDK version 7.0, which is used for compiling the application. The --platform=${BUILDPLATFORM} directive allows building for the architecture of the build machine.
+Why?: This image includes all necessary tools and libraries for building .NET applications. Specifying --platform supports cross-platform builds.
+
+
+========================================================================================
+ARG TARGETPLATFORM
+ARG TARGETARCH
+ARG BUILDPLATFORM
+=======================================================================================
+
+Purpose: These ARG directives define build-time variables that capture the build platform, target platform, and target architecture.
+Why?: These are useful for logging and ensuring that the build process is aware of the target platform and architecture, aiding in cross-platform support and debugging.
+
+2. Working Directory and Initial File Copy
+
+===============================================================
+WORKDIR /source
+COPY *.csproj .
+=================================================================
+
+Purpose: Sets the working directory to /source and copies all .csproj files (project files) from the host to the container.
+Why?: By copying only the .csproj files initially, Docker can cache this step if the project file hasn’t changed, speeding up the build process during dependency restoration.
+
+
+====================================================================================
+RUN dotnet restore -a $TARGETARCH
+======================================================================================
+Purpose: Restores the project’s NuGet dependencies for the specified target architecture.
+Why?: This step ensures all required dependencies are downloaded and prepared for building. Specifying -a $TARGETARCH ensures compatibility with the target architecture.
+
+3. Copying Source Code and Building
+
+=========================================================
+COPY . .
+==========================================================
+
+RUN dotnet publish -c release -o /app -a $TARGETARCH --self-contained false --no-restore
+Purpose: Copies all remaining source code into the container and runs dotnet publish to compile and package the app into the /app directory.
+Flags:
+-c release: Builds the application in Release mode for optimized performance.
+-o /app: Outputs the compiled code to the /app directory.
+-a $TARGETARCH: Builds for the target architecture.
+--self-contained false: Indicates that the build is not self-contained, meaning it relies on the .NET runtime being available on the system.
+--no-restore: Skips restoring dependencies since it was already done in the previous step.
+Why?: This creates an optimized, platform-specific build that can be deployed.
+
+4. Final Runtime Image
+================================================================================================
+FROM mcr.microsoft.com/dotnet/runtime:7.0
+==============================================================================================
+Purpose: Uses the .NET runtime image, version 7.0, which is smaller and only includes what is necessary to run .NET applications.
+Why?: This stage is for running the application, so it uses the runtime image rather than the larger SDK image.
+
+
+===========================================================================================
+WORKDIR /app
+COPY --from=build /app .
+=============================================================================================
+Purpose: Sets the working directory to /app and copies the published build output from the build stage.
+Why?: This step transfers the compiled code from the build image to the runtime image.
+
+5. Entry Point
+
+=====================================================================================================
+ENTRYPOINT ["dotnet", "Worker.dll"]
+===================================================================================================
+Purpose: Specifies the command to run when the container starts, in this case, running the .NET application defined in Worker.dll.
+Why?: This defines how the application should be launched when the container is run.
+Important Notes:
+Cross-Platform Building: This Dockerfile supports building for different architectures (amd64, arm64, etc.). The --platform flag and build arguments (BUILDPLATFORM, TARGETPLATFORM, TARGETARCH) are crucial for creating images that target platforms different from the host.
+Multi-Stage Build: This Dockerfile uses multi-stage builds to separate the build environment (with SDK) from the runtime environment (with only the runtime). This reduces the final image size by ensuring the runtime container is minimal.
+
+
+
